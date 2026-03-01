@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>StoryChat — Fake Message Builder</title>
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="theme-color" content="#0a0a0f"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <!-- Firebase v9 compat (CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<style>
+:root {
+  --bg:#0a0a0f; --surface:#13131a; --surface2:#1c1c26; --border:#2a2a38;
+  --accent:#c084fc; --accent2:#818cf8; --text:#f1f0ff; --muted:#6b6b8a;
+  --imsg-blue:#1c7aff; --imsg-gray:#2a2a2e; --green:#34d399; --red:#ff4466;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:9999;}
+
+/* ── Layout ── */
+.app{display:grid;grid-template-columns:290px 1fr 280px;grid-template-rows:62px 1fr;height:100vh;}
+header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:0 22px;border-bottom:1px solid var(--border);background:rgba(10,10,15,0.96);backdrop-filter:blur(12px);z-index:200;}
+.logo{font-family:'Playfair Display',serif;font-size:1.3rem;font-style:italic;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.logo span{font-style:normal;font-weight:700;}
+.header-right{display:flex;gap:8px;align-items:center;}
+.panel-l{border-right:1px solid var(--border);overflow-y:auto;background:var(--surface);padding:16px;}
+.panel-c{overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:24px 16px;background:var(--bg);}
+.panel-r{border-left:1px solid var(--border);overflow-y:auto;background:var(--surface);padding:16px;}
+
+/* ── Auth Bar ── */
+.auth-bar{display:flex;align-items:center;gap:8px;}
+.user-chip{display:flex;align-items:center;gap:6px;padding:4px 10px 4px 5px;border-radius:20px;background:var(--surface2);border:1px solid var(--border);font-size:0.75rem;}
+.user-chip img{width:22px;height:22px;border-radius:50%;}
+.user-name{max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* ── Common Components ── */
+.section-label{font-size:0.62rem;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:9px;}
+.divider{border:none;border-top:1px solid var(--border);margin:13px 0;}
+.btn{padding:6px 14px;border-radius:10px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:0.78rem;font-weight:500;transition:all 0.15s;}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;}
+.btn-primary:hover{opacity:0.85;transform:translateY(-1px);}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
+.btn-sm{padding:4px 10px;font-size:0.73rem;}
+.btn-danger{background:transparent;border:1px solid var(--red);color:var(--red);}
+.btn-danger:hover{background:rgba(255,68,102,0.1);}
+.btn-add{width:100%;padding:7px;border-radius:9px;border:1px dashed var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:0.76rem;transition:all 0.15s;font-family:'DM Sans',sans-serif;}
+.btn-add:hover{border-color:var(--accent);color:var(--accent);}
+.form-group{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
+.form-label{font-size:0.68rem;color:var(--muted);letter-spacing:0.05em;}
+.form-input,.form-select,.form-textarea{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:7px 11px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.81rem;transition:border-color 0.15s;outline:none;}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--accent);}
+.form-select{cursor:pointer;}
+.form-select option{background:var(--surface2);}
+.form-textarea{resize:vertical;min-height:64px;line-height:1.5;}
+.icon-btn{background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 4px;border-radius:4px;font-size:0.8rem;line-height:1;transition:color 0.15s;}
+.icon-btn:hover{color:var(--red);}
+.empty{text-align:center;padding:22px 12px;color:var(--muted);}
+.empty .ei{font-size:1.6rem;margin-bottom:7px;}
+.empty p{font-size:0.74rem;line-height:1.6;}
+
+/* ── Contact Cards ── */
+.contact-card{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);margin-bottom:6px;cursor:pointer;transition:all 0.15s;background:var(--surface2);}
+.contact-card:hover{border-color:var(--accent);}
+.contact-card.active{border-color:var(--accent);background:rgba(192,132,252,0.08);}
+.av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.78rem;font-weight:600;flex-shrink:0;overflow:hidden;color:#fff;}
+.av img{width:100%;height:100%;object-fit:cover;}
+.contact-name{font-size:0.81rem;font-weight:500;}
+.contact-role{font-size:0.66rem;color:var(--muted);}
+
+/* ── Scene Tabs ── */
+.scene-tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;}
+.scene-tab{padding:4px 11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:0.72rem;font-family:'DM Sans',sans-serif;transition:all 0.15s;display:flex;align-items:center;gap:5px;}
+.scene-tab.active{border-color:var(--accent);color:var(--accent);background:rgba(192,132,252,0.08);}
+.scene-tab .del-scene{font-size:0.65rem;opacity:0.6;margin-left:2px;}
+.scene-tab .del-scene:hover{opacity:1;color:var(--red);}
+
+/* ── Theme tabs ── */
+.theme-tabs{display:flex;gap:5px;margin-bottom:18px;}
+.theme-tab{padding:4px 12px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:0.71rem;font-family:'DM Sans',sans-serif;transition:all 0.15s;}
+.theme-tab.active{border-color:var(--accent);color:var(--accent);background:rgba(192,132,252,0.08);}
+
+/* ── Phone frame ── */
+.phone-frame{width:308px;background:#000;border-radius:44px;border:2px solid #2a2a2a;box-shadow:0 0 0 1px #111,0 36px 72px rgba(0,0,0,0.7),0 0 50px rgba(192,132,252,0.07);overflow:hidden;}
+.dyn-island{width:112px;height:28px;background:#000;border-radius:17px;margin:11px auto 0;}
+.status-bar{display:flex;justify-content:space-between;align-items:center;padding:6px 18px 3px;font-size:0.68rem;font-weight:600;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}
+.status-icons{display:flex;gap:5px;align-items:center;}
+.imsg-hdr{display:flex;flex-direction:column;align-items:center;padding:6px 14px 9px;border-bottom:0.5px solid rgba(255,255,255,0.1);background:#000;}
+.imsg-av{width:48px;height:48px;border-radius:50%;margin-bottom:3px;display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:600;color:#fff;overflow:hidden;}
+.imsg-av img{width:100%;height:100%;object-fit:cover;}
+.imsg-name{font-size:0.81rem;font-weight:600;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}
+.imsg-label{font-size:0.64rem;color:rgba(255,255,255,0.42);font-family:-apple-system,BlinkMacSystemFont,sans-serif;}
+.msg-thread{padding:9px 7px;min-height:260px;max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;background:#000;}
+.msg-row{display:flex;align-items:flex-end;gap:4px;animation:msgIn 0.16s ease;}
+@keyframes msgIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.msg-row.sent{flex-direction:row-reverse;}
+.mini-av{width:20px;height:20px;border-radius:50%;flex-shrink:0;font-size:0.55rem;font-weight:600;display:flex;align-items:center;justify-content:center;margin-bottom:2px;overflow:hidden;color:#fff;}
+.mini-av img{width:100%;height:100%;object-fit:cover;}
+.bubble{max-width:72%;padding:7px 11px;border-radius:18px;font-size:0.78rem;line-height:1.45;font-family:-apple-system,BlinkMacSystemFont,sans-serif;word-break:break-word;position:relative;margin-bottom:2px;}
+.bubble.recv{background:var(--imsg-gray);color:#fff;border-bottom-left-radius:5px;}
+.bubble.sent{background:var(--imsg-blue);color:#fff;border-bottom-right-radius:5px;}
+.rxn{position:absolute;bottom:-10px;right:4px;background:#1c1c1e;border-radius:10px;padding:1px 4px;font-size:0.65rem;border:1px solid #2c2c2e;}
+.msg-time-div{font-size:0.57rem;color:rgba(255,255,255,0.3);text-align:center;margin:5px 0 2px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}
+.msg-st{font-size:0.57rem;color:rgba(255,255,255,0.36);text-align:right;padding-right:5px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin-top:1px;}
+
+/* ── Special Bubble Types ── */
+/* Image placeholder */
+.bubble-img{max-width:72%;border-radius:14px;overflow:hidden;position:relative;cursor:default;}
+.bubble-img.recv{border-bottom-left-radius:5px;}
+.bubble-img.sent{border-bottom-right-radius:5px;margin-left:auto;}
+.img-placeholder{width:180px;height:130px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}
+.img-placeholder.recv-bg{background:#3a3a3e;}
+.img-placeholder.sent-bg{background:#0056cc;}
+.img-placeholder .img-icon{font-size:1.8rem;}
+.img-placeholder .img-cap{font-size:0.68rem;color:rgba(255,255,255,0.6);}
+
+/* Voice note */
+.bubble-voice{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:18px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}
+.bubble-voice.recv{background:var(--imsg-gray);border-bottom-left-radius:5px;}
+.bubble-voice.sent{background:var(--imsg-blue);border-bottom-right-radius:5px;}
+.voice-play{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:0.7rem;}
+.voice-wave{flex:1;height:24px;display:flex;align-items:center;gap:2px;}
+.voice-bar{background:rgba(255,255,255,0.5);border-radius:2px;width:3px;}
+.voice-dur{font-size:0.65rem;color:rgba(255,255,255,0.6);}
+
+/* Video/call bubble */
+.bubble-call{display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:18px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}
+.bubble-call.recv{background:var(--imsg-gray);border-bottom-left-radius:5px;}
+.bubble-call.sent{background:var(--imsg-blue);border-bottom-right-radius:5px;}
+.call-icon-wrap{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;font-size:1rem;}
+.call-label{font-size:0.76rem;color:#fff;font-weight:500;}
+.call-sub{font-size:0.64rem;color:rgba(255,255,255,0.55);}
+
+/* ── Typing ── */
+.typing-row{padding:3px 7px 2px;background:#000;}
+.typing-dots{display:none;align-items:center;gap:4px;padding:7px 11px;background:var(--imsg-gray);border-radius:18px;border-bottom-left-radius:5px;width:fit-content;}
+.typing-dots.show{display:flex;}
+.dot{width:5px;height:5px;background:rgba(255,255,255,0.44);border-radius:50%;animation:bounce 1.2s infinite;}
+.dot:nth-child(2){animation-delay:0.2s;}.dot:nth-child(3){animation-delay:0.4s;}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+.imsg-input-bar{display:flex;align-items:center;gap:6px;padding:6px 12px 13px;background:#000;border-top:0.5px solid rgba(255,255,255,0.08);}
+.imsg-field{flex:1;background:#1c1c1e;border:1px solid #2c2c2e;border-radius:20px;padding:5px 11px;color:rgba(255,255,255,0.36);font-size:0.74rem;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}
+.imsg-send{width:26px;height:26px;background:var(--imsg-blue);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+
+/* ── Theme overrides ── */
+.wa .phone-frame{background:#0b141a;}.wa .imsg-hdr,.wa .status-bar{background:#1f2c34;}.wa .msg-thread{background:#0b141a;}.wa .bubble.recv{background:#1f2c34;}.wa .bubble.sent{background:#005c4b;}.wa .imsg-input-bar{background:#1f2c34;border-top-color:rgba(255,255,255,0.06);}.wa .imsg-field{background:#2a3942;border-color:transparent;}.wa .imsg-send{background:#00a884;}.wa .typing-row{background:#0b141a;}.wa .typing-dots{background:#1f2c34;}.wa .bubble-voice.recv{background:#1f2c34;}.wa .bubble-voice.sent{background:#005c4b;}.wa .bubble-call.recv{background:#1f2c34;}.wa .bubble-call.sent{background:#005c4b;}.wa .img-placeholder.recv-bg{background:#1f2c34;}.wa .img-placeholder.sent-bg{background:#024a3a;}
+.tg .phone-frame{background:#17212b;}.tg .imsg-hdr,.tg .status-bar{background:#17212b;}.tg .msg-thread{background:#0e1621;}.tg .bubble.recv{background:#182533;}.tg .bubble.sent{background:#2b5278;}.tg .imsg-input-bar{background:#17212b;border-top-color:rgba(255,255,255,0.06);}.tg .imsg-field{background:#242f3d;border-color:transparent;}.tg .imsg-send{background:#2b9edd;}.tg .typing-row{background:#0e1621;}.tg .typing-dots{background:#182533;}.tg .bubble-voice.recv{background:#182533;}.tg .bubble-voice.sent{background:#2b5278;}.tg .bubble-call.recv{background:#182533;}.tg .bubble-call.sent{background:#2b5278;}.tg .img-placeholder.recv-bg{background:#182533;}.tg .img-placeholder.sent-bg{background:#1f3d5c;}
+
+/* ── Sender Toggle ── */
+.sender-toggle{display:flex;gap:6px;flex-wrap:wrap;}
+.sender-opt{flex:1;min-width:0;padding:5px 7px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:0.72rem;font-family:'DM Sans',sans-serif;transition:all 0.15s;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sender-opt.active{border-color:var(--accent);background:rgba(192,132,252,0.1);color:var(--accent);}
+
+/* ── Message type selector ── */
+.type-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px;}
+.type-opt{padding:4px 9px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:0.7rem;font-family:'DM Sans',sans-serif;transition:all 0.15s;}
+.type-opt.active{border-color:var(--accent2);color:var(--accent2);background:rgba(129,140,248,0.1);}
+
+/* ── Message list ── */
+.msg-list{display:flex;flex-direction:column;gap:4px;}
+.msg-item{display:flex;align-items:flex-start;gap:6px;padding:6px 8px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);}
+.msg-item-body{flex:1;min-width:0;}
+.msg-item-sender{font-size:0.64rem;color:var(--muted);margin-bottom:1px;}
+.msg-item-text{font-size:0.76rem;line-height:1.35;word-break:break-word;}
+.msg-item-type{font-size:0.62rem;color:var(--accent2);margin-top:2px;}
+
+/* ── Saved Conversations ── */
+.saved-list{display:flex;flex-direction:column;gap:6px;}
+.saved-card{padding:9px 11px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;transition:all 0.15s;}
+.saved-card:hover{border-color:var(--accent);}
+.saved-card-title{font-size:0.82rem;font-weight:500;margin-bottom:2px;}
+.saved-card-meta{font-size:0.66rem;color:var(--muted);}
+.saved-card-actions{display:flex;gap:5px;margin-top:7px;}
+
+/* ── Modal ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.74);backdrop-filter:blur(5px);z-index:1000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 0.2s;}
+.overlay.open{opacity:1;pointer-events:all;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:24px;width:360px;max-width:92vw;transform:scale(0.95);transition:transform 0.2s;max-height:90vh;overflow-y:auto;}
+.overlay.open .modal{transform:scale(1);}
+.modal-title{font-family:'Playfair Display',serif;font-size:1.1rem;margin-bottom:16px;}
+.modal-actions{display:flex;gap:7px;justify-content:flex-end;margin-top:16px;}
+
+/* ── Color Swatches ── */
+.color-row{display:flex;gap:6px;flex-wrap:wrap;}
+.swatch{width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform 0.15s;}
+.swatch:hover,.swatch.active{transform:scale(1.22);border-color:#fff;}
+
+/* ── Save Indicator ── */
+.save-status{font-size:0.68rem;color:var(--muted);display:flex;align-items:center;gap:5px;}
+.save-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);}
+.save-dot.saved{background:var(--green);}
+.save-dot.saving{background:#fbbf24;animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:22px;right:22px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 15px;font-size:0.78rem;z-index:9998;transform:translateY(14px);opacity:0;transition:all 0.22s;pointer-events:none;}
+.toast.show{transform:translateY(0);opacity:1;}
+.toast.success{border-color:var(--green);color:var(--green);}
+.toast.error{border-color:var(--red);color:var(--red);}
+
+::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ════════════ HEADER ════════════ -->
+<header>
+  <div class="logo">Story<span>Chat</span></div>
+  <div class="header-right">
+    <!-- Save status -->
+    <div class="save-status" id="saveStatus">
+      <div class="save-dot" id="saveDot"></div>
+      <span id="saveLabel">Not saved</span>
+    </div>
+    <div style="width:1px;height:20px;background:var(--border)"></div>
+    <!-- Auth -->
+    <div class="auth-bar" id="authBar">
+      <button class="btn btn-ghost btn-sm" onclick="signInGoogle()">🔑 Sign in with Google</button>
+    </div>
+    <div style="width:1px;height:20px;background:var(--border)"></div>
+    <button class="btn btn-ghost btn-sm" onclick="loadSample()">✨ Sample</button>
+    <button class="btn btn-primary btn-sm" onclick="exportPNG()">📸 Export PNG</button>
+  </div>
+</header>
+
+<!-- ════════════ LEFT PANEL ════════════ -->
+<div class="panel-l">
+
+  <!-- Characters -->
+  <div class="section-label">Characters</div>
+  <div id="contactList"></div>
+  <button class="btn-add" onclick="openAddContact()">+ Add Character</button>
+
+  <div class="divider"></div>
+
+  <!-- Scenes -->
+  <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Scenes</span>
+    <button class="btn btn-ghost btn-sm" onclick="addScene()" style="padding:2px 8px;font-size:0.68rem">+ Scene</button>
+  </div>
+  <div class="scene-tabs" id="sceneTabs"></div>
+
+  <div class="divider"></div>
+
+  <!-- Phone Settings -->
+  <div class="section-label">Phone Settings</div>
+  <div class="form-group">
+    <label class="form-label">Active Contact (header)</label>
+    <select class="form-select" id="activeContactSelect" onchange="setActiveFromSelect()">
+      <option value="">— Select contact —</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Clock Time</label>
+    <input class="form-input" id="statusTime" value="9:41 AM" oninput="updateStatusBar()"/>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Signal</label>
+    <select class="form-select" id="signal" onchange="updateStatusBar()">
+      <option>●●●●●</option><option>●●●○○</option><option>●○○○○</option><option>No Service</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Battery</label>
+    <select class="form-select" id="battery" onchange="updateStatusBar()">
+      <option>100%</option><option>80%</option><option>60%</option><option>45%</option><option>20%</option><option>5%</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Typing Indicator</label>
+    <select class="form-select" id="typingToggle" onchange="toggleTyping()">
+      <option value="off">Off</option><option value="on">On</option>
+    </select>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Saved Conversations -->
+  <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Saved Convos</span>
+    <button class="btn btn-ghost btn-sm" id="btnSave" onclick="saveConvo()" style="padding:2px 8px;font-size:0.68rem" disabled>Save</button>
+  </div>
+  <div id="savedList">
+    <div class="empty" style="padding:10px 0"><p>Sign in to save &amp; load</p></div>
+  </div>
+
+</div>
+
+<!-- ════════════ CENTER PANEL ════════════ -->
+<div class="panel-c">
+  <div class="theme-tabs">
+    <button class="theme-tab active" data-theme="" onclick="setTheme(this)">iMessage</button>
+    <button class="theme-tab" data-theme="wa" onclick="setTheme(this)">WhatsApp</button>
+    <button class="theme-tab" data-theme="tg" onclick="setTheme(this)">Telegram</button>
+  </div>
+
+  <div id="phoneWrapper">
+    <div class="phone-frame" id="phoneFrame">
+      <div class="dyn-island"></div>
+      <div class="status-bar">
+        <span id="sbTime">9:41 AM</span>
+        <div class="status-icons">
+          <span id="sbSignal" style="font-size:0.57rem">●●●●●</span>
+          <span>WiFi</span>
+          <span id="sbBattery">100%</span>
+        </div>
+      </div>
+      <div class="imsg-hdr">
+        <div class="imsg-av" id="hAvatar" style="background:#1c7aff">?</div>
+        <div class="imsg-name" id="hName">Select a Character</div>
+        <div class="imsg-label" id="hLabel">iMessage</div>
+      </div>
+      <div class="msg-thread" id="msgThread">
+        <div class="empty" id="threadEmpty"><div class="ei">💬</div><p>Add characters &amp;<br>compose messages</p></div>
+      </div>
+      <div class="typing-row">
+        <div class="typing-dots" id="typingDots">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+      <div class="imsg-input-bar">
+        <div class="imsg-field" id="inputFieldLabel">iMessage</div>
+        <div class="imsg-send">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="white"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ RIGHT PANEL ════════════ -->
+<div class="panel-r">
+  <div class="section-label">Compose Message</div>
+
+  <div class="form-group">
+    <label class="form-label">Message Type</label>
+    <div class="type-row">
+      <button class="type-opt active" data-type="text" onclick="selectType(this)">💬 Text</button>
+      <button class="type-opt" data-type="image" onclick="selectType(this)">🖼 Image</button>
+      <button class="type-opt" data-type="voice" onclick="selectType(this)">🎤 Voice</button>
+      <button class="type-opt" data-type="call" onclick="selectType(this)">📞 Call</button>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label">Sender</label>
+    <div class="sender-toggle" id="senderToggle">
+      <span style="font-size:0.73rem;color:var(--muted)">Add characters first</span>
+    </div>
+  </div>
+
+  <!-- Text fields -->
+  <div id="typeTextFields">
+    <div class="form-group">
+      <label class="form-label">Message</label>
+      <textarea class="form-textarea" id="msgText" placeholder="Type message here…"></textarea>
+    </div>
+  </div>
+
+  <!-- Image fields -->
+  <div id="typeImageFields" style="display:none">
+    <div class="form-group">
+      <label class="form-label">Caption (optional)</label>
+      <input class="form-input" id="imgCaption" placeholder="Photo · Sent"/>
+    </div>
+  </div>
+
+  <!-- Voice fields -->
+  <div id="typeVoiceFields" style="display:none">
+    <div class="form-group">
+      <label class="form-label">Duration</label>
+      <input class="form-input" id="voiceDur" placeholder="0:08" value="0:08"/>
+    </div>
+  </div>
+
+  <!-- Call fields -->
+  <div id="typeCallFields" style="display:none">
+    <div class="form-group">
+      <label class="form-label">Call Type</label>
+      <select class="form-select" id="callType">
+        <option value="audio">📞 Audio Call</option>
+        <option value="video">📹 Video Call</option>
+        <option value="missed">❌ Missed Call</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Duration / Label</label>
+      <input class="form-input" id="callDur" placeholder="1 min 24 sec" value="1 min 24 sec"/>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label">Timestamp</label>
+    <input class="form-input" id="msgTime" value="10:42 AM"/>
+  </div>
+
+  <div id="textOnlyOptions">
+    <div class="form-group">
+      <label class="form-label">Status</label>
+      <select class="form-select" id="msgStatus">
+        <option value="">None</option>
+        <option>Delivered</option><option>Read</option><option>Sent</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Reaction</label>
+      <select class="form-select" id="msgReaction">
+        <option value="">None</option>
+        <option>❤️</option><option>😂</option><option>😢</option>
+        <option>👍</option><option>‼️</option><option>❓</option>
+      </select>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" style="width:100%;margin-bottom:13px" onclick="addMsg()">+ Add to Scene</button>
+
+  <div class="divider"></div>
+  <div class="section-label">Scene Messages (<span id="msgCount">0</span>)</div>
+  <div id="msgListPanel">
+    <div class="empty" style="padding:10px 0"><p>No messages yet</p></div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-label">Export</div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <button class="btn btn-primary btn-sm" onclick="exportPNG()">📸 PNG</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearScene()">🗑 Clear Scene</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearAll()">🗑 Clear All</button>
+  </div>
+</div>
+
+</div><!-- end .app -->
+
+<!-- ════════════ ADD CONTACT MODAL ════════════ -->
+<div class="overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-title">New Character</div>
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input class="form-input" id="newName" placeholder="e.g. Jake, Mia…"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Role / Label</label>
+      <input class="form-input" id="newRole" placeholder="e.g. Best Friend, Ex-boyfriend…"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Avatar Color</label>
+      <div class="color-row" id="colorRow"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Avatar Image URL (optional)</label>
+      <input class="form-input" id="newImg" placeholder="https://…"/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('addModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveContact()">Add Character</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ LOAD CONVO MODAL ════════════ -->
+<div class="overlay" id="loadModal">
+  <div class="modal">
+    <div class="modal-title">Load Conversation</div>
+    <div id="loadModalList" style="max-height:340px;overflow-y:auto;margin-bottom:6px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('loadModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════
+//  FIREBASE CONFIG
+//  ⚠️  Replace with your own Firebase project config
+//  Get it from: console.firebase.google.com
+// ════════════════════════════════════════════════
+const FB_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+let fb, auth, db, currentUser = null;
+let fbReady = false;
+
+function initFirebase() {
+  try {
+    firebase.initializeApp(FB_CONFIG);
+    fb = firebase.app();
+    auth = firebase.auth();
+    db = firebase.firestore();
+    fbReady = true;
+
+    auth.onAuthStateChanged(user => {
+      currentUser = user;
+      renderAuthBar();
+      if (user) {
+        document.getElementById('btnSave').disabled = false;
+        loadSavedList();
+        setSaveStatus('saved', 'Signed in');
+      } else {
+        document.getElementById('btnSave').disabled = true;
+        document.getElementById('savedList').innerHTML = '<div class="empty" style="padding:10px 0"><p>Sign in to save &amp; load</p></div>';
+        setSaveStatus('', 'Not saved');
+      }
+    });
+  } catch(e) {
+    // Firebase not configured — run in offline/local mode
+    fbReady = false;
+  }
+}
+
+function signInGoogle() {
+  if (!fbReady) { toast('Configure Firebase first — see SETUP.md', 'error'); return; }
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err => toast(err.message, 'error'));
+}
+
+function signOut() {
+  if (!fbReady) return;
+  auth.signOut().then(() => toast('Signed out'));
+}
+
+function renderAuthBar() {
+  const bar = document.getElementById('authBar');
+  if (currentUser) {
+    bar.innerHTML = `
+      <div class="user-chip">
+        ${currentUser.photoURL ? `<img src="${currentUser.photoURL}" referrerpolicy="no-referrer">` : ''}
+        <span class="user-name">${currentUser.displayName || currentUser.email}</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="signOut()">Sign out</button>`;
+  } else {
+    bar.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="signInGoogle()">🔑 Sign in with Google</button>`;
+  }
+}
+
+// ════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════
+const COLORS = ['#1c7aff','#f472b6','#34d399','#fbbf24','#a78bfa','#f87171','#38bdf8','#fb7185','#4ade80','#ff8c42'];
+
+let S = {
+  contacts: [],
+  scenes: [{ id: 's1', label: 'Scene 1', messages: [] }],
+  activeSceneIdx: 0,
+  activeId: null,
+  senderId: null,
+  msgType: 'text'
+};
+
+const curScene = () => S.scenes[S.activeSceneIdx];
+const curMsgs  = () => curScene().messages;
+
+// ════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════
+function init() {
+  initFirebase();
+  buildSwatches();
+  updateStatusBar();
+  renderAll();
+}
+
+// ════════════════════════════════════════════════
+//  CONTACTS
+// ════════════════════════════════════════════════
+function openAddContact() {
+  ['newName','newRole','newImg'].forEach(id => document.getElementById(id).value='');
+  document.querySelectorAll('.swatch').forEach((s,i)=>s.classList.toggle('active',i===0));
+  openModal('addModal');
+}
+
+function saveContact() {
+  const name = document.getElementById('newName').value.trim();
+  if (!name) return toast('Enter a name','error');
+  const color = document.querySelector('.swatch.active')?.dataset.color || COLORS[0];
+  S.contacts.push({
+    id: 'c'+Date.now(), name,
+    role: document.getElementById('newRole').value.trim(),
+    color,
+    img: document.getElementById('newImg').value.trim()
+  });
+  closeModal('addModal');
+  renderAll();
+  toast(name + ' added ✓','success');
+}
+
+function deleteContact(id) {
+  S.contacts = S.contacts.filter(c=>c.id!==id);
+  if (S.activeId===id) S.activeId=null;
+  if (S.senderId===id) S.senderId=null;
+  renderAll();
+}
+
+function renderContacts() {
+  const el = document.getElementById('contactList');
+  if (!S.contacts.length) { el.innerHTML='<div class="empty" style="padding:10px 0"><p>No characters yet</p></div>'; return; }
+  el.innerHTML = S.contacts.map(c=>`
+    <div class="contact-card ${S.activeId===c.id?'active':''}" onclick="clickContact('${c.id}')">
+      <div class="av" style="background:${c.color}">${avHtml(c)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="contact-name">${c.name}</div>
+        ${c.role?`<div class="contact-role">${c.role}</div>`:''}
+      </div>
+      <button class="icon-btn" onclick="event.stopPropagation();deleteContact('${c.id}')">✕</button>
+    </div>`).join('');
+}
+
+function avHtml(c) {
+  if (c.img) return `<img src="${c.img}" onerror="this.style.display='none'" alt="">`;
+  return c.name[0].toUpperCase();
+}
+
+function clickContact(id) {
+  S.activeId = id;
+  document.getElementById('activeContactSelect').value = id;
+  renderContacts(); updateHeader(); renderThread();
+}
+
+function setActiveFromSelect() {
+  S.activeId = document.getElementById('activeContactSelect').value || null;
+  renderContacts(); updateHeader(); renderThread();
+}
+
+function updateContactSelect() {
+  const sel = document.getElementById('activeContactSelect');
+  sel.innerHTML = '<option value="">— Select contact —</option>' +
+    S.contacts.map(c=>`<option value="${c.id}" ${c.id===S.activeId?'selected':''}>${c.name}</option>`).join('');
+}
+
+function updateHeader() {
+  const c = S.contacts.find(x=>x.id===S.activeId);
+  const av=document.getElementById('hAvatar'),nm=document.getElementById('hName'),lb=document.getElementById('hLabel');
+  if (c) { av.style.background=c.color; av.innerHTML=avHtml(c); nm.textContent=c.name; lb.textContent=c.role||'iMessage'; }
+  else { av.style.background='#1c7aff'; av.innerHTML='?'; nm.textContent='Select a Character'; lb.textContent='iMessage'; }
+}
+
+// ════════════════════════════════════════════════
+//  SCENES
+// ════════════════════════════════════════════════
+function addScene() {
+  const idx = S.scenes.length + 1;
+  S.scenes.push({ id: 's'+Date.now(), label: 'Scene '+idx, messages: [] });
+  S.activeSceneIdx = S.scenes.length - 1;
+  renderSceneTabs(); renderThread(); renderMsgList();
+}
+
+function switchScene(idx) {
+  S.activeSceneIdx = idx;
+  renderSceneTabs(); renderThread(); renderMsgList();
+}
+
+function deleteScene(idx) {
+  if (S.scenes.length === 1) { toast('Need at least one scene','error'); return; }
+  S.scenes.splice(idx, 1);
+  S.activeSceneIdx = Math.min(S.activeSceneIdx, S.scenes.length-1);
+  renderSceneTabs(); renderThread(); renderMsgList();
+}
+
+function renderSceneTabs() {
+  const el = document.getElementById('sceneTabs');
+  el.innerHTML = S.scenes.map((sc,i)=>`
+    <button class="scene-tab ${i===S.activeSceneIdx?'active':''}" onclick="switchScene(${i})">
+      ${sc.label}
+      ${S.scenes.length>1?`<span class="del-scene" onclick="event.stopPropagation();deleteScene(${i})">✕</span>`:''}
+    </button>`).join('');
+}
+
+// ════════════════════════════════════════════════
+//  STATUS BAR
+// ════════════════════════════════════════════════
+function updateStatusBar() {
+  document.getElementById('sbTime').textContent = document.getElementById('statusTime').value||'9:41';
+  document.getElementById('sbSignal').textContent = document.getElementById('signal').value;
+  document.getElementById('sbBattery').textContent = document.getElementById('battery').value;
+}
+
+function toggleTyping() {
+  document.getElementById('typingDots').classList.toggle('show', document.getElementById('typingToggle').value==='on');
+}
+
+// ════════════════════════════════════════════════
+//  MESSAGE TYPE
+// ════════════════════════════════════════════════
+function selectType(btn) {
+  document.querySelectorAll('.type-opt').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  S.msgType = btn.dataset.type;
+  const types=['text','image','voice','call'];
+  types.forEach(t=>{
+    document.getElementById('type'+cap(t)+'Fields').style.display = t===S.msgType?'':'none';
+  });
+  document.getElementById('textOnlyOptions').style.display = S.msgType==='text'?'':'none';
+}
+
+const cap = s => s[0].toUpperCase()+s.slice(1);
+
+// ════════════════════════════════════════════════
+//  SENDER TOGGLE
+// ════════════════════════════════════════════════
+function renderSenderToggle() {
+  const el = document.getElementById('senderToggle');
+  if (!S.contacts.length) { el.innerHTML='<span style="font-size:0.73rem;color:var(--muted)">Add characters first</span>'; return; }
+  el.innerHTML = S.contacts.map(c=>`
+    <button class="sender-opt ${S.senderId===c.id?'active':''}" onclick="selectSender('${c.id}')">${c.name}</button>`).join('');
+}
+
+function selectSender(id) { S.senderId=id; renderSenderToggle(); }
+
+// ════════════════════════════════════════════════
+//  ADD MESSAGE
+// ════════════════════════════════════════════════
+function addMsg() {
+  if (!S.senderId) return toast('Select a sender','error');
+  const time = document.getElementById('msgTime').value||'10:42 AM';
+  let msg = { id:'m'+Date.now(), senderId:S.senderId, type:S.msgType, time };
+
+  if (S.msgType==='text') {
+    const text = document.getElementById('msgText').value.trim();
+    if (!text) return toast('Type a message','error');
+    msg.text = text;
+    msg.status = document.getElementById('msgStatus').value;
+    msg.reaction = document.getElementById('msgReaction').value;
+    document.getElementById('msgText').value='';
+    document.getElementById('msgStatus').value='';
+    document.getElementById('msgReaction').value='';
+  } else if (S.msgType==='image') {
+    msg.caption = document.getElementById('imgCaption').value||'Photo';
+  } else if (S.msgType==='voice') {
+    msg.duration = document.getElementById('voiceDur').value||'0:08';
+  } else if (S.msgType==='call') {
+    msg.callType = document.getElementById('callType').value;
+    msg.callDur = document.getElementById('callDur').value||'1 min';
+  }
+
+  curScene().messages.push(msg);
+  renderThread(); renderMsgList();
+  toast('Added ✓','success');
+  setTimeout(()=>{ const t=document.getElementById('msgThread'); t.scrollTop=t.scrollHeight; },50);
+  setSaveStatus('saving','Unsaved changes');
+}
+
+function deleteMsg(id) {
+  curScene().messages = curScene().messages.filter(m=>m.id!==id);
+  renderThread(); renderMsgList();
+  setSaveStatus('saving','Unsaved changes');
+}
+
+// ════════════════════════════════════════════════
+//  RENDER THREAD
+// ════════════════════════════════════════════════
+function renderThread() {
+  const el = document.getElementById('msgThread');
+  const msgs = curMsgs();
+  if (!msgs.length) { el.innerHTML='<div class="empty" id="threadEmpty"><div class="ei">💬</div><p>Add characters &amp;<br>compose messages</p></div>'; return; }
+
+  let html='', lastTime='';
+  msgs.forEach((msg,i)=>{
+    const c = S.contacts.find(x=>x.id===msg.senderId);
+    if (!c) return;
+    const isRecv = msg.senderId===S.activeId;
+    const side = isRecv?'recv':'sent';
+    const isLast = i===msgs.length-1;
+
+    if (msg.time!==lastTime) { html+=`<div class="msg-time-div">${msg.time}</div>`; lastTime=msg.time; }
+
+    if (msg.type==='text'||!msg.type) {
+      const rxn = msg.reaction?`<div class="rxn">${msg.reaction}</div>`:'';
+      const st = (isLast&&msg.status&&!isRecv)?`<div class="msg-st">${msg.status}</div>`:'';
+      html+=`
+        <div class="msg-row ${isRecv?'':'sent'}">
+          ${isRecv?`<div class="mini-av" style="background:${c.color}">${avHtml(c)}</div>`:''}
+          <div class="bubble ${side}">${esc(msg.text||'')}${rxn}</div>
+          ${!isRecv?`<div class="mini-av" style="background:${c.color}">${avHtml(c)}</div>`:''}
+        </div>${st}`;
+
+    } else if (msg.type==='image') {
+      const bgCls = isRecv?'recv-bg':'sent-bg';
+      html+=`
+        <div class="msg-row ${isRecv?'':'sent'}">
+          ${isRecv?`<div class="mini-av" style="background:${c.color}">${avHtml(c)}</div>`:''}
+          <div class="bubble-img ${side}">
+            <div class="img-placeholder ${bgCls}">
+              <div class="img-icon">🖼️</div>
+              <div class="img-cap">${esc(msg.caption||'Photo')}</div>
+            </div>
+          </div>
+          ${!isRecv?`<div class="mini-av" style="background:${c.color}">${avHtml(c)}</div>`:''}
+        </div>`;
+
+    } else if (msg.type==='voice') {
+      const bars = Array.from({length:18},(_,i)=>{
+        const h = [4,8,14,10,18,12,20,16,10,14,8,18,12,16,10,8,14,6][i]||8;
+        return `<div class="voice-bar" style="height:${h}px"></div>`;
+      }).join('');
+      html+=`
+        <div class="msg-row ${isRecv?'':'sent'}">
+          ${isRecv?`<div class="mini-av" style="background:${c.color}">${avHtml(c)}</div>`:''}
+          <div class="bubble-voice ${side}">
+            <div class="voice-play">▶</div>
+            <div class="voice-wave">${bars}</div>
+            <div class="voice-dur">${esc(msg.duration||'0:08')}</div>
+          </div>
+          ${!isRecv?`<div class="mini-av" style="background:${c.color}">${avHtml(c)}</div>`:''}
+        </div>`;
+
+    } else if (msg.type==='call') {
+      const icons = {audio:'📞',video:'📹',missed:'❌'};
+      const labels = {audio:'Audio Call',video:'Video Call',missed:'Missed Call'};
+      html+=`
+        <div class="msg-row ${isRecv?'':'sent'}">
+          ${isRecv?`<div class="mini-av" style="background:${c.color}">${avHtml(c)}</div>`:''}
+          <div class="bubble-call ${side}">
+            <div class="call-icon-wrap">${icons[msg.callType]||'📞'}</div>
+            <div>
+              <div class="call-label">${labels[msg.callType]||'Call'}</div>
+              <div class="call-sub">${esc(msg.callDur||'')}</div>
+            </div>
+          </div>
+          ${!isRecv?`<div class="mini-av" style="background:${c.color}">${avHtml(c)}</div>`:''}
+        </div>`;
+    }
+  });
+  el.innerHTML=html;
+}
+
+// ════════════════════════════════════════════════
+//  RENDER MESSAGE LIST (right panel)
+// ════════════════════════════════════════════════
+function renderMsgList() {
+  const el = document.getElementById('msgListPanel');
+  const msgs = curMsgs();
+  document.getElementById('msgCount').textContent = msgs.length;
+  if (!msgs.length) { el.innerHTML='<div class="empty" style="padding:8px 0"><p>No messages yet</p></div>'; return; }
+  const typeLabels={text:'💬 Text',image:'🖼 Image',voice:'🎤 Voice',call:'📞 Call'};
+  el.innerHTML='<div class="msg-list">'+msgs.map(m=>{
+    const c=S.contacts.find(x=>x.id===m.senderId);
+    const preview = m.type==='text'?esc(m.text||''):typeLabels[m.type]||m.type;
+    return `<div class="msg-item">
+      <div class="mini-av" style="background:${c?.color||'#555'};width:18px;height:18px;font-size:0.52rem">${c?avHtml(c):'?'}</div>
+      <div class="msg-item-body">
+        <div class="msg-item-sender">${c?.name||'?'} · ${m.time}</div>
+        <div class="msg-item-text">${preview}</div>
+        ${m.type&&m.type!=='text'?`<div class="msg-item-type">${typeLabels[m.type]||''}</div>`:''}
+      </div>
+      <button class="icon-btn" onclick="deleteMsg('${m.id}')">✕</button>
+    </div>`;
+  }).join('')+'</div>';
+}
+
+// ════════════════════════════════════════════════
+//  THEME
+// ════════════════════════════════════════════════
+function setTheme(btn) {
+  document.querySelectorAll('.theme-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('phoneWrapper').className = btn.dataset.theme||'';
+  const lbl = btn.dataset.theme==='wa'?'Message':btn.dataset.theme==='tg'?'Message':'iMessage';
+  document.getElementById('inputFieldLabel').textContent=lbl;
+}
+
+// ════════════════════════════════════════════════
+//  EXPORT PNG
+// ════════════════════════════════════════════════
+function exportPNG() {
+  const frame=document.getElementById('phoneFrame');
+  toast('Generating…');
+  html2canvas(frame,{scale:3,backgroundColor:null,useCORS:true,allowTaint:true,logging:false}).then(canvas=>{
+    const a=document.createElement('a');
+    a.download=`storychat-${curScene().label.replace(/\s/g,'-')}-${Date.now()}.png`;
+    a.href=canvas.toDataURL('image/png');
+    a.click();
+    toast('Exported! ✓','success');
+  }).catch(()=>toast('Export failed','error'));
+}
+
+// ════════════════════════════════════════════════
+//  FIREBASE — SAVE / LOAD
+// ════════════════════════════════════════════════
+let saveTimer=null;
+
+async function saveConvo() {
+  if (!currentUser||!fbReady) return toast('Sign in first','error');
+  setSaveStatus('saving','Saving…');
+  const data = {
+    uid: currentUser.uid,
+    title: curScene().label || 'Untitled',
+    contacts: S.contacts,
+    scenes: S.scenes,
+    activeId: S.activeId,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  try {
+    if (S._docId) {
+      await db.collection('conversations').doc(S._docId).set(data);
+    } else {
+      const ref = await db.collection('conversations').add(data);
+      S._docId = ref.id;
+    }
+    setSaveStatus('saved','Saved ✓');
+    toast('Saved ✓','success');
+    loadSavedList();
+  } catch(e) { toast('Save failed: '+e.message,'error'); setSaveStatus('','Error'); }
+}
+
+async function loadSavedList() {
+  if (!currentUser||!fbReady) return;
+  const el=document.getElementById('savedList');
+  el.innerHTML='<div style="font-size:0.74rem;color:var(--muted);padding:6px 0">Loading…</div>';
+  try {
+    const snap = await db.collection('conversations').where('uid','==',currentUser.uid).orderBy('updatedAt','desc').limit(20).get();
+    if (snap.empty) { el.innerHTML='<div class="empty" style="padding:10px 0"><p>No saved convos</p></div>'; return; }
+    el.innerHTML='<div class="saved-list">'+snap.docs.map(doc=>{
+      const d=doc.data();
+      const dt=d.updatedAt?.toDate();
+      const dateStr=dt?dt.toLocaleDateString():'';
+      return `<div class="saved-card" onclick="loadConvo('${doc.id}')">
+        <div class="saved-card-title">${esc(d.title||'Untitled')}</div>
+        <div class="saved-card-meta">${d.scenes?.length||1} scene(s) · ${d.contacts?.length||0} chars · ${dateStr}</div>
+        <div class="saved-card-actions">
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();loadConvo('${doc.id}')">Load</button>
+          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteConvo('${doc.id}')">Delete</button>
+        </div>
+      </div>`;
+    }).join('')+'</div>';
+  } catch(e) { el.innerHTML='<div class="empty" style="padding:10px 0"><p>Error loading</p></div>'; }
+}
+
+async function loadConvo(docId) {
+  if (!fbReady) return;
+  try {
+    const doc = await db.collection('conversations').doc(docId).get();
+    if (!doc.exists) return toast('Not found','error');
+    const d = doc.data();
+    S.contacts = d.contacts||[];
+    S.scenes = d.scenes||[{id:'s1',label:'Scene 1',messages:[]}];
+    S.activeSceneIdx = 0;
+    S.activeId = d.activeId||null;
+    S.senderId = null;
+    S._docId = docId;
+    renderAll();
+    setSaveStatus('saved','Loaded ✓');
+    toast('Loaded ✓','success');
+  } catch(e) { toast('Load failed','error'); }
+}
+
+async function deleteConvo(docId) {
+  if (!confirm('Delete this conversation?')) return;
+  try {
+    await db.collection('conversations').doc(docId).delete();
+    if (S._docId===docId) S._docId=null;
+    toast('Deleted','success');
+    loadSavedList();
+  } catch(e) { toast('Delete failed','error'); }
+}
+
+// ════════════════════════════════════════════════
+//  SAVE STATUS
+// ════════════════════════════════════════════════
+function setSaveStatus(state, label) {
+  const dot=document.getElementById('saveDot'), lbl=document.getElementById('saveLabel');
+  dot.className='save-dot'+(state?' '+state:'');
+  lbl.textContent=label;
+}
+
+// ════════════════════════════════════════════════
+//  SAMPLE DATA
+// ════════════════════════════════════════════════
+function loadSample() {
+  S.contacts=[
+    {id:'c1',name:'Mia',role:'Best Friend',color:'#f472b6',img:''},
+    {id:'c2',name:'Jake',role:'Ex-boyfriend',color:'#1c7aff',img:''}
+  ];
+  S.activeId='c1'; S.senderId='c2'; S._docId=null;
+  S.scenes=[
+    { id:'s1', label:'Scene 1', messages:[
+      {id:'m1',senderId:'c1',type:'text',text:'Hey… are you coming tonight?',time:'9:14 PM',status:'',reaction:''},
+      {id:'m2',senderId:'c2',type:'text',text:"I don't think that's a good idea.",time:'9:14 PM',status:'',reaction:''},
+      {id:'m3',senderId:'c1',type:'text',text:'Please. Just this once.',time:'9:15 PM',status:'',reaction:'❤️'},
+    ]},
+    { id:'s2', label:'Scene 2', messages:[
+      {id:'m4',senderId:'c1',type:'voice',duration:'0:12',time:'9:22 PM'},
+      {id:'m5',senderId:'c2',type:'text',text:"You always say that, Mia.",time:'9:24 PM',status:'',reaction:''},
+      {id:'m6',senderId:'c1',type:'text',text:"Because it's always true 💙",time:'9:25 PM',status:'Read',reaction:''},
+    ]},
+    { id:'s3', label:'Scene 3', messages:[
+      {id:'m7',senderId:'c2',type:'call',callType:'missed',callDur:'',time:'10:01 PM'},
+      {id:'m8',senderId:'c1',type:'text',text:'You called?',time:'10:14 PM',status:'Delivered',reaction:''},
+    ]}
+  ];
+  S.activeSceneIdx=0;
+  document.getElementById('statusTime').value='9:25 PM';
+  updateStatusBar();
+  renderAll();
+  toast('Sample loaded ✓','success');
+}
+
+// ════════════════════════════════════════════════
+//  CLEAR
+// ════════════════════════════════════════════════
+function clearScene() {
+  if (!confirm(`Clear messages in "${curScene().label}"?`)) return;
+  curScene().messages=[];
+  renderThread(); renderMsgList();
+}
+
+function clearAll() {
+  if (!confirm('Clear everything?')) return;
+  S={contacts:[],scenes:[{id:'s1',label:'Scene 1',messages:[]}],activeSceneIdx:0,activeId:null,senderId:null,msgType:'text'};
+  renderAll(); toast('Cleared');
+}
+
+// ════════════════════════════════════════════════
+//  COLOR SWATCHES
+// ════════════════════════════════════════════════
+function buildSwatches() {
+  document.getElementById('colorRow').innerHTML=COLORS.map((c,i)=>
+    `<div class="swatch ${i===0?'active':''}" style="background:${c}" data-color="${c}" onclick="pickColor(this)"></div>`
+  ).join('');
+}
+
+function pickColor(el) {
+  document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ════════════════════════════════════════════════
+//  MODAL
+// ════════════════════════════════════════════════
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('open'); }));
+
+// ════════════════════════════════════════════════
+//  TOAST
+// ════════════════════════════════════════════════
+let _tt;
+function toast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show '+(type||'');
+  clearTimeout(_tt); _tt=setTimeout(()=>t.className='toast',2800);
+}
+
+// ════════════════════════════════════════════════
+//  UTILS
+// ════════════════════════════════════════════════
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
+function renderAll(){
+  renderContacts(); renderSceneTabs(); renderSenderToggle();
+  updateContactSelect(); updateHeader(); renderThread(); renderMsgList();
+}
+
+// PWA
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+init();
+</script>
+</body>
+</html>
